@@ -43,7 +43,11 @@ client:
   socks_port: 1080
 
   # Local SOCKS5 bind address (127.0.0.1 = localhost only)
-  socks_host: "127.0.0.1"
+  socks_host: "0.0.0.0"
+
+  # Optinal local SOCKS5 username and password
+  # socks_username: ""
+  # socks_password: ""
 
   # Username and secret are set per-user in generated client configs
   # username: "set-by-adduser"
