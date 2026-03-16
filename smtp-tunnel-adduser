@@ -42,7 +42,10 @@ client:
 
   # Local SOCKS5 proxy
   socks_port: 1080
-  socks_host: "127.0.0.1"
+  socks_host: "0.0.0.0"
+  # Optinal local SOCKS5 username and password
+  # socks_username: ""
+  # socks_password: ""
 
   # CA certificate for server verification
   ca_cert: "ca.crt"

@@ -770,6 +770,8 @@ class ClientConfig:
     server_port: int = 587
     socks_port: int = 1080
     socks_host: str = '127.0.0.1'
+    socks_username: str | None = None
+    socks_password: str | None = None
     username: str = ''  # Username for multi-user auth
     secret: str = ''
 

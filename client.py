@@ -21,6 +21,7 @@ import struct
 import time
 import os
 import socket
+import random
 from typing import Dict, Optional, Tuple
 from dataclasses import dataclass
 
@@ -59,12 +60,18 @@ def make_connect_payload(host: str, port: int) -> bytes:
 class SOCKS5:
     VERSION = 0x05
     AUTH_NONE = 0x00
+    AUTH_USER_PASSWORD = 0x02
     CMD_CONNECT = 0x01
     ATYP_IPV4 = 0x01
     ATYP_DOMAIN = 0x03
     ATYP_IPV6 = 0x04
     REP_SUCCESS = 0x00
     REP_FAILURE = 0x01
+
+
+class AUTH_UP:
+    VERSION = 0x01
+    REP_SUCCESS = 0x00
 
 
 @dataclass
@@ -369,10 +376,12 @@ class TunnelClient:
 # ============================================================================
 
 class SOCKS5Server:
-    def __init__(self, tunnel: TunnelClient, host: str = '127.0.0.1', port: int = 1080):
+    def __init__(self, tunnel: TunnelClient, host: str = '127.0.0.1', port: int = 1080, username: str = None, password: str = None):
         self.tunnel = tunnel
         self.host = host
         self.port = port
+        self.username = username.encode('utf-8')
+        self.password = password.encode('utf-8')
 
     async def handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         """Handle SOCKS5 client."""
@@ -389,9 +398,31 @@ class SOCKS5Server:
                 return
 
             nmethods = data[1]
-            await reader.read(nmethods)
+            client_methods = await reader.read(nmethods)
 
-            writer.write(bytes([SOCKS5.VERSION, SOCKS5.AUTH_NONE]))
+            if self.username is not None:
+                if SOCKS5.AUTH_USER_PASSWORD not in client_methods:
+                    return
+                writer.write(bytes([SOCKS5.VERSION, SOCKS5.AUTH_USER_PASSWORD]))
+                await writer.drain()
+                data = await reader.read(2)
+                if len(data) < 2 or data[0] != AUTH_UP.VERSION:
+                    return
+                username = await reader.read(data[1])
+                if len(username) != data[1]:
+                    return
+                data = await reader.read(1)
+                if len(data) < 1:
+                    return
+                password = await reader.read(data[0])
+                if len(password) != data[0]:
+                    return
+                if self.username != username or self.password != password:
+                    await asyncio.sleep(random.uniform(5, 10))
+                    return
+                writer.write(bytes([AUTH_UP.VERSION, AUTH_UP.REP_SUCCESS]))
+            else:
+                writer.write(bytes([SOCKS5.VERSION, SOCKS5.AUTH_NONE]))
             await writer.drain()
 
             # Request
@@ -511,7 +542,7 @@ async def run_client(config: ClientConfig, ca_cert: str):
         receiver_task = asyncio.create_task(tunnel._receiver_loop())
 
         # Start SOCKS server
-        socks = SOCKS5Server(tunnel, config.socks_host, config.socks_port)
+        socks = SOCKS5Server(tunnel, config.socks_host, config.socks_port, config.socks_username, config.socks_password)
 
         try:
             # Create SOCKS server but don't block on it
@@ -587,6 +618,8 @@ def main():
         server_port=args.server_port or client_conf.get('server_port', 587),
         socks_port=args.socks_port or client_conf.get('socks_port', 1080),
         socks_host=client_conf.get('socks_host', '127.0.0.1'),
+        socks_username=client_conf.get('socks_username', None),
+        socks_password=client_conf.get('socks_password', None),
         username=args.username or client_conf.get('username', ''),
         secret=args.secret or client_conf.get('secret', ''),
     )
